@@ -1,0 +1,16 @@
+/* Custom styles on top of bootstrap.min.css (imported below) */
+@import './bootstrap.min.css';
+
+body {
+    background-color: #f5f6fa;
+}
+
+.task-title-done {
+    text-decoration: line-through;
+    color: #6c757d;
+}
+
+.due-overdue {
+    color: #dc3545;
+    font-weight: 600;
+}

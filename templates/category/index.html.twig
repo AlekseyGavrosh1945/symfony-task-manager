@@ -1,0 +1,47 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Categories{% endblock %}
+
+{% block body %}
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h1 class="h3 mb-0">Categories</h1>
+        <a class="btn btn-primary" href="{{ path('app_category_new') }}">+ New category</a>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+            <tr>
+                <th>Name</th>
+                <th>Color</th>
+                <th>Tasks</th>
+                <th class="text-end">Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for row in categories %}
+                {% set category = row[0] %}
+                <tr>
+                    <td>
+                        <span class="badge" style="background-color: {{ category.color }}">{{ category.name }}</span>
+                    </td>
+                    <td><code>{{ category.color }}</code></td>
+                    <td>{{ row.taskCount }}</td>
+                    <td class="text-end">
+                        <div class="d-inline-flex gap-1">
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ path('app_category_edit', {id: category.id}) }}">Edit</a>
+                            <form method="post" action="{{ path('app_category_delete', {id: category.id}) }}"
+                                  onsubmit="return confirm('Delete category? Its tasks will stay, just without a category.')">
+                                <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ category.id) }}">
+                                <button class="btn btn-sm btn-outline-danger">&#128465;</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="4" class="text-center text-muted py-4">No categories yet.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

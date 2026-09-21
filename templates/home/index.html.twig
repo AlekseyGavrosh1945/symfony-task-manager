@@ -1,0 +1,66 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block body %}
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h1 class="h3 mb-0">Dashboard</h1>
+        <a class="btn btn-primary" href="{{ path('app_task_new') }}">+ New task</a>
+    </div>
+
+    <div class="row g-3 mb-4">
+        {% for item in [
+            {label: 'New', value: stats.byStatus['new'] ?? 0, class: 'bg-secondary text-white'},
+            {label: 'In progress', value: stats.byStatus['in_progress'] ?? 0, class: 'bg-warning'},
+            {label: 'Done', value: stats.byStatus['done'] ?? 0, class: 'bg-success text-white'},
+            {label: 'Overdue', value: stats.overdue, class: stats.overdue > 0 ? 'bg-danger text-white' : 'bg-white'},
+        ] %}
+            <div class="col-6 col-md-3">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body {{ item.class }} rounded">
+                        <div class="fs-1 fw-bold lh-1">{{ item.value }}</div>
+                        <div class="text-uppercase small mt-2">{{ item.label }}</div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <strong>Recent tasks</strong>
+            <a href="{{ path('app_task_index') }}">View all →</a>
+        </div>
+        <table class="table table-hover mb-0 align-middle">
+            <thead class="table-light">
+            <tr>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Category</th>
+                <th>Due date</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for task in recentTasks %}
+                <tr>
+                    <td><a href="{{ path('app_task_show', {id: task.id}) }}">{{ task.title }}</a></td>
+                    <td><span class="badge {{ task.status.badgeClass }}">{{ task.status.label }}</span></td>
+                    <td><span class="badge {{ task.priority.badgeClass }}">{{ task.priority.label }}</span></td>
+                    <td>
+                        {% if task.category %}
+                            <span class="badge" style="background-color: {{ task.category.color }}">{{ task.category.name }}</span>
+                        {% else %}<span class="text-muted">—</span>{% endif %}
+                    </td>
+                    <td class="{{ task.isOverdue ? 'due-overdue' }}">
+                        {{ task.dueDate ? task.dueDate|date('Y-m-d') : '—' }}
+                        {% if task.isOverdue %}(overdue){% endif %}
+                    </td>
+                </tr>
+            {% else %}
+                <tr><td colspan="5" class="text-center text-muted py-4">No tasks yet. Create your first one!</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ task.title }}{% endblock %}
+
+{% block body %}
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <strong>Task #{{ task.id }}</strong>
+                    <span class="badge {{ task.status.badgeClass }}">{{ task.status.label }}</span>
+                </div>
+                <div class="card-body">
+                    <h1 class="h4 mb-3 {{ task.status.value == 'done' ? 'task-title-done' }}">{{ task.title }}</h1>
+
+                    <dl class="row mb-0">
+                        <dt class="col-sm-3">Priority</dt>
+                        <dd class="col-sm-9"><span class="badge {{ task.priority.badgeClass }}">{{ task.priority.label }}</span></dd>
+
+                        <dt class="col-sm-3">Category</dt>
+                        <dd class="col-sm-9">
+                            {% if task.category %}
+                                <span class="badge" style="background-color: {{ task.category.color }}">{{ task.category.name }}</span>
+                            {% else %}<span class="text-muted">No category</span>{% endif %}
+                        </dd>
+
+                        <dt class="col-sm-3">Due date</dt>
+                        <dd class="col-sm-9 {{ task.isOverdue ? 'due-overdue' }}">
+                            {{ task.dueDate ? task.dueDate|date('Y-m-d') : '—' }}
+                            {% if task.isOverdue %}(overdue){% endif %}
+                        </dd>
+
+                        <dt class="col-sm-3">Created</dt>
+                        <dd class="col-sm-9">{{ task.createdAt|date('Y-m-d H:i') }}</dd>
+
+                        <dt class="col-sm-3">Updated</dt>
+                        <dd class="col-sm-9">{{ task.updatedAt|date('Y-m-d H:i') }}</dd>
+
+                        <dt class="col-sm-3">Description</dt>
+                        <dd class="col-sm-9">{{ task.description ? task.description|nl2br : '—' }}</dd>
+                    </dl>
+                </div>
+                <div class="card-footer bg-white d-flex gap-2">
+                    <a class="btn btn-outline-secondary" href="{{ path('app_task_index') }}">&larr; Back to list</a>
+                    <a class="btn btn-primary" href="{{ path('app_task_edit', {id: task.id}) }}">Edit</a>
+                    <form class="ms-auto" method="post" action="{{ path('app_task_delete', {id: task.id}) }}"
+                          onsubmit="return confirm('Delete this task?')">
+                        <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ task.id) }}">
+                        <button class="btn btn-outline-danger">Delete</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
