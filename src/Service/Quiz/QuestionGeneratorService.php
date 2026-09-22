@@ -22,6 +22,7 @@ class QuestionGeneratorService
     public function __construct(
         private readonly HttpClientInterface $httpClient,
         private readonly LoggerInterface $logger,
+        private readonly WikiFactProvider $wikiFactProvider,
         #[Autowire(env: 'OPENAI_API_KEY')]
         private readonly string $apiKey,
         #[Autowire(env: 'OPENAI_BASE_URL')]
@@ -40,13 +41,20 @@ class QuestionGeneratorService
     public function generate(): array
     {
         if ('' !== $this->apiKey) {
+            // The fact comes from Wikipedia, not from the model's imagination:
+            // this is what keeps sources real and verifiable.
+            $fact = $this->wikiFactProvider->getRandomFact();
             $models = array_filter(array_map('trim', explode(',', $this->model.','.$this->fallbackModels)));
 
             foreach ($models as $model) {
                 try {
-                    $generated = $this->generateViaApi($model);
+                    $generated = $this->generateViaApi($model, $fact);
 
-                    return [...$generated, 'source_type' => QuizQuestionSources::AI];
+                    return [
+                        ...$generated,
+                        'source' => sprintf("Википедия: «%s» — %s", $fact['title'], $fact['url']),
+                        'source_type' => QuizQuestionSources::AI,
+                    ];
                 } catch (\Throwable $e) {
                     $this->logger->error('AI question generation failed, trying the next model', [
                         'model' => $model,
@@ -71,9 +79,11 @@ class QuestionGeneratorService
     }
 
     /**
+     * @param array{title: string, extract: string, url: string} $fact
+     *
      * @return array{question: string, answer: string, source: string}
      */
-    private function generateViaApi(string $model): array
+    private function generateViaApi(string $model, array $fact): array
     {
         $response = $this->httpClient->request('POST', rtrim($this->baseUrl, '/').'/chat/completions', [
             'headers' => [
@@ -85,7 +95,11 @@ class QuestionGeneratorService
                 'temperature' => 1.0,
                 'messages' => [
                     ['role' => 'system', 'content' => self::SYSTEM_PROMPT],
-                    ['role' => 'user', 'content' => 'Сгенерируй один оригинальный вопрос для творческого отбора телепрограммы «Что? Где? Когда?».'],
+                    ['role' => 'user', 'content' => sprintf(
+                        "Реальный факт из Википедии:\n«%s» — %s\n\nСоставь по нему один вопрос для творческого отбора «Что? Где? Когда?».",
+                        $fact['title'],
+                        $fact['extract']
+                    )],
                 ],
             ],
             'timeout' => 120,
@@ -116,17 +130,15 @@ class QuestionGeneratorService
     }
 
     private const SYSTEM_PROMPT = <<<'TXT'
-        Ты — опытный автор телевизионной игры «Что? Где? Когда?» уровня творческого отбора «ИГРА-ТВ».
-        Напиши ОДИН новый вопрос высшей категории сложности. Требования редакции:
-        - короткая фабула (2-5 предложений), информация подаётся через неочевидный, но честный ключ;
-        - ответ должен ВЫВОДИТЬСЯ из текста вопроса логикой, ассоциацией или знанием факта,
-          а не быть общеизвестной банальностью («столица Франции» — не вопрос);
-        - ответ — конкретный существующий факт: слово, имя, название, термин, дата;
-        - избегай шаблонов: вопросов про столицы, планеты, самые-самые рекорды;
-        - вопрос должен опираться на РЕАЛЬНЫЙ проверяемый факт — не выдумывай.
-        Источник укажи настоящий и точный: книга (автор, название, издательство, год, страница),
-        статья (издание, дата) или точная ссылка. Если не уверен в реальности источника —
-        возьми другой факт.
+        Ты — автор телевизионной игры «Что? Где? Когда?» уровня творческого отбора.
+        Тебе дают РЕАЛЬНЫЙ факт из Википедии. Твоя задача — построить вокруг него вопрос:
+        - ответом служит ключевое понятие, имя или название из этого факта;
+        - СТРОГО используй только информацию из данного факта — ничего не выдумывай,
+          не добавляй других персон, событий и деталей;
+        - спрячь прямые подсказки: убери из текста вопроса само заглавие статьи и
+          очевидные слова-маркеры, дай факту интересную фабульную подачу;
+        - ответ должен выводиться логикой или узнаванием, а не быть общеизвестной банальностью;
+        - вопрос — 2-5 предложений, завершается собственно вопросом.
         Ответ верни строго в JSON без markdown:
         {"question": "...", "answer": "...", "source": "..."}
         TXT;
