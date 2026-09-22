@@ -28,6 +28,9 @@ class QuestionGeneratorService
         private readonly string $baseUrl,
         #[Autowire(env: 'OPENAI_MODEL')]
         private readonly string $model,
+        // Comma-separated fallback models: free pools are flaky (429s happen).
+        #[Autowire(env: 'OPENAI_FALLBACK_MODELS')]
+        private readonly string $fallbackModels,
     ) {
     }
 
@@ -37,15 +40,28 @@ class QuestionGeneratorService
     public function generate(): array
     {
         if ('' !== $this->apiKey) {
-            try {
-                $generated = $this->generateViaApi();
+            $models = array_filter(array_map('trim', explode(',', $this->model.','.$this->fallbackModels)));
 
-                return [...$generated, 'source_type' => QuizQuestionSources::AI];
-            } catch (\Throwable $e) {
-                $this->logger->error('AI question generation failed, falling back to the local set', [
-                    'error' => $e->getMessage(),
-                ]);
+            foreach ($models as $model) {
+                try {
+                    $generated = $this->generateViaApi($model);
+
+                    return [...$generated, 'source_type' => QuizQuestionSources::AI];
+                } catch (\Throwable $e) {
+                    $this->logger->error('AI question generation failed, trying the next model', [
+                        'model' => $model,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
+
+            // The key is configured but nothing answered: surface the failure so
+            // the Messenger retry strategy re-runs the handler later, instead of
+            // silently saving a placeholder question.
+            throw new \RuntimeException(sprintf(
+                'All AI models failed (%s). The question will be regenerated on retry.',
+                implode(', ', $models)
+            ));
         }
 
         return [
@@ -57,7 +73,7 @@ class QuestionGeneratorService
     /**
      * @return array{question: string, answer: string, source: string}
      */
-    private function generateViaApi(): array
+    private function generateViaApi(string $model): array
     {
         $response = $this->httpClient->request('POST', rtrim($this->baseUrl, '/').'/chat/completions', [
             'headers' => [
@@ -65,20 +81,26 @@ class QuestionGeneratorService
                 'Content-Type' => 'application/json',
             ],
             'json' => [
-                'model' => $this->model,
+                'model' => $model,
                 'temperature' => 1.0,
-                'response_format' => ['type' => 'json_object'],
                 'messages' => [
                     ['role' => 'system', 'content' => self::SYSTEM_PROMPT],
                     ['role' => 'user', 'content' => 'Сгенерируй один оригинальный вопрос для творческого отбора телепрограммы «Что? Где? Когда?».'],
                 ],
             ],
-            'timeout' => 90,
+            'timeout' => 120,
         ]);
 
         $payload = $response->toArray();
         $content = (string) ($payload['choices'][0]['message']['content'] ?? '');
-        $decoded = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
+
+        // Not every OpenRouter model honours json_object mode: extract the JSON
+        // object from a possibly wrapped (```json ... ```) reply ourselves.
+        if (!preg_match('/\{.*\}/s', $content, $m)) {
+            throw new \RuntimeException('The AI reply contains no JSON object.');
+        }
+
+        $decoded = json_decode($m[0], true, flags: JSON_THROW_ON_ERROR);
 
         foreach (['question', 'answer', 'source'] as $key) {
             if (empty($decoded[$key]) || !\is_string($decoded[$key])) {
