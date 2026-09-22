@@ -8,6 +8,29 @@ services:
       database:
         condition: service_healthy
 
+  # Worker that fires scheduled messages (quiz questions twice a day).
+  scheduler:
+    build: docker/php
+    command: php bin/console messenger:consume scheduler_quiz -vv --time-limit=3600
+    restart: unless-stopped
+    volumes:
+      - .:/var/www/app
+    depends_on:
+      database:
+        condition: service_healthy
+
+  # Worker that processes the async queue — outgoing emails are routed here
+  # (see routing: SendEmailMessage in config/packages/messenger.yaml).
+  worker:
+    build: docker/php
+    command: php bin/console messenger:consume async failed -vv --time-limit=3600
+    restart: unless-stopped
+    volumes:
+      - .:/var/www/app
+    depends_on:
+      database:
+        condition: service_healthy
+
   nginx:
     image: nginx:alpine
     ports:

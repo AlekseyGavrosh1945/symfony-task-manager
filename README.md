@@ -61,7 +61,47 @@ curl -X POST http://localhost:8081/api/tasks \
 | Консольные команды | `src/Command/TaskStatsCommand.php` |
 | Миграции и фикстуры | `migrations/`, `src/DataFixtures/` |
 | Монолог: именованные каналы логов | `config/packages/monolog.yaml` |
+| Scheduler + Messenger-очереди, воркеры в Docker | `src/Schedule/`, `src/MessageHandler/`, compose-сервисы `scheduler`/`worker` |
+| Интеграция с внешними API (AI-генерация, SMTP-отправка) | `src/Service/Quiz/` |
 | Шаблоны Twig, наследование, form themes | `templates/` |
+
+## Генератор вопросов «ЧГК?» с отправкой в редакцию tvigra.ru
+
+Отдельный контур приложения: **дважды в день** (12:00 и 19:00) генерируется вопрос
+в формате «Что? Где? Когда?» и письмо-заявка на творческий отбор телепрограммы
+([chgk.tvigra.ru/question/email](https://chgk.tvigra.ru/question/email)) — с вопросом,
+ответом, источником и данными автора.
+
+- Расписание: `src/Schedule/QuizQuestionSchedule.php` (Symfony Scheduler, cron-выражения)
+- Очередь: письма уходят не синхронно, а через Messenger (`async` transport, doctrine) —
+  отправляет воркер `worker`
+- Генерация: `src/Service/Quiz/QuestionGeneratorService.php` — OpenAI-совместимый API
+  (`OPENAI_API_KEY`/`OPENAI_BASE_URL`/`OPENAI_MODEL`), без ключа — локальный демо-набор
+- Письмо: `src/Service/Quiz/TvigraQuestionMailer.php` — формат по правилам tvigra.ru
+  (вопрос + ответ, источник, ФИО, адрес, телефон, фото, род занятий)
+- Ручной запуск: `docker compose exec app php bin/console app:quiz:send`
+  (`--send` — реально отправить, `--to` — другой получатель)
+
+Контейнеры: `scheduler` (планировщик) и `worker` (очередь) запускаются из compose.
+
+### Настройка (значения класть в `.env.local`, он не коммитится)
+
+```dotenv
+MAILER_DSN=smtp://LOGIN:APP_PASSWORD@smtp.mail.ru:465?encryption=ssl
+MAILER_FROM=LOGIN                 # должен совпадать с SMTP-аккаунтом
+TVIGRA_TEST_EMAIL=you@gmail.com   # тестовый получатель вместо редакции
+TVIGRA_AUTOSEND=0                 # 1 = по расписанию письма уходят сами
+AUTHOR_FULL_NAME=                 # данные автора по требованиям tvigra.ru
+AUTHOR_ADDRESS=
+AUTHOR_PHONE=
+AUTHOR_BIO=                       # возраст, чем занимается
+AUTHOR_PHOTO_PATH=assets/author.jpg
+OPENAI_API_KEY=                   # без ключа вопросы берутся из локального набора
+```
+
+По умолчанию `TVIGRA_AUTOSEND=0`: вопросы генерируются и сохраняются в БД
+(таблица `quiz_question`) как черновики — в редакцию ничего не уходит,
+пока ты сам не проверишь (`app:quiz:send --send`) или не включишь автосписание.
 
 ## Полезные команды
 
